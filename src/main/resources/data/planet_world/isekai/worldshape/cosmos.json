@@ -1,0 +1,61 @@
+{
+  "dimension": "planet_world:cosmos",
+  "playable_range": { "min_y": -64, "max_y": 320, "distribution": "uniform" },
+  "surface_anchor": { "type": "isekai_api:world_surface" },
+  "ore_strategy": { "type": "isekai_api:column_local" },
+  "structure_strategy": { "type": "isekai_api:identity" },
+  "mob_spawn_strategy": { "type": "isekai_api:identity" },
+  "default_structure_predicate": { "type": "isekai_api:always" },
+  "applies_to": { "keys": [
+    "planet_world:planet_verdant",
+    "planet_world:planet_ember",
+    "planet_world:planet_frost",
+    "planet_world:planet_stone",
+    "planet_world:planet_desert",
+    "planet_world:planet_mushroom",
+    "planet_world:planet_jungle",
+    "planet_world:planet_volcanic",
+    "planet_world:planet_crystal",
+    "planet_world:planet_dead"
+  ] },
+  "atmosphere": {
+    "has_precipitation": false,
+    "sky_color": 0,
+    "fog_color": 526344,
+    "water_fog_color": 329011
+  },
+  "client_atmosphere": {
+    "fog_color": 328966,
+    "fog_near_distance": 24.0,
+    "fog_far_distance": 220.0
+  },
+  "content_overrides": {
+    "block_overrides": {
+      "surface_top": {
+        "planet_world:planet_verdant": { "Name": "minecraft:grass_block", "Properties": { "snowy": "false" } },
+        "planet_world:planet_ember": { "Name": "minecraft:red_sand" },
+        "planet_world:planet_frost": { "Name": "minecraft:snow_block" },
+        "planet_world:planet_stone": { "Name": "minecraft:stone" },
+        "planet_world:planet_desert": { "Name": "minecraft:sand" },
+        "planet_world:planet_mushroom": { "Name": "minecraft:mycelium" },
+        "planet_world:planet_jungle": { "Name": "minecraft:grass_block", "Properties": { "snowy": "false" } },
+        "planet_world:planet_volcanic": { "Name": "minecraft:basalt", "Properties": { "axis": "y" } },
+        "planet_world:planet_crystal": { "Name": "minecraft:calcite" },
+        "planet_world:planet_dead": { "Name": "minecraft:coarse_dirt" }
+      },
+      "default_block": {
+        "planet_world:planet_verdant": { "Name": "minecraft:stone" },
+        "planet_world:planet_ember": { "Name": "minecraft:red_sandstone" },
+        "planet_world:planet_frost": { "Name": "minecraft:packed_ice" },
+        "planet_world:planet_stone": { "Name": "minecraft:deepslate" },
+        "planet_world:planet_desert": { "Name": "minecraft:sandstone" },
+        "planet_world:planet_mushroom": { "Name": "minecraft:stone" },
+        "planet_world:planet_jungle": { "Name": "minecraft:stone" },
+        "planet_world:planet_volcanic": { "Name": "minecraft:blackstone" },
+        "planet_world:planet_crystal": { "Name": "minecraft:amethyst_block" },
+        "planet_world:planet_dead": { "Name": "minecraft:deepslate" }
+      }
+    }
+  },
+  "priority": 100
+}

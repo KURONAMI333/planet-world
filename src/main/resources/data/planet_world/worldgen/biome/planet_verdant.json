@@ -1,0 +1,56 @@
+{
+  "has_precipitation": false,
+  "temperature": 0.7,
+  "downfall": 0.4,
+  "effects": {
+    "fog_color": 526344,
+    "sky_color": 0,
+    "water_color": 4159204,
+    "water_fog_color": 329011
+  },
+  "carvers": {},
+  "features": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+      "planet_world:ore_coal",
+      "planet_world:ore_coal_rich",
+      "planet_world:ore_copper",
+      "planet_world:ore_iron",
+      "planet_world:ore_iron_deep",
+      "planet_world:ore_lapis",
+      "planet_world:ore_gold",
+      "planet_world:ore_redstone",
+      "planet_world:ore_diamond"
+    ],
+    [],
+    [],
+    [
+      "planet_world:cap_patch_grass",
+      "planet_world:cap_trees_plains",
+      "planet_world:cap_flowers"
+    ],
+    []
+  ],
+  "spawn_costs": {},
+  "spawners": {
+    "creature": [
+      {
+        "type": "minecraft:sheep",
+        "maxCount": 4,
+        "minCount": 2,
+        "weight": 12
+      },
+      {
+        "type": "minecraft:cow",
+        "maxCount": 4,
+        "minCount": 2,
+        "weight": 8
+      }
+    ]
+  }
+}

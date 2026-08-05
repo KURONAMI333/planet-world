@@ -1,0 +1,41 @@
+{
+  "has_precipitation": false,
+  "temperature": 0.5,
+  "downfall": 0.2,
+  "effects": {
+    "fog_color": 7368816,
+    "sky_color": 0,
+    "water_color": 4159204,
+    "water_fog_color": 329011
+  },
+  "carvers": {},
+  "features": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+      "planet_world:ore_coal",
+      "planet_world:ore_coal_rich",
+      "planet_world:ore_copper",
+      "planet_world:ore_iron",
+      "planet_world:ore_iron_rich",
+      "planet_world:ore_iron_deep",
+      "planet_world:ore_lapis",
+      "planet_world:ore_gold",
+      "planet_world:ore_redstone",
+      "planet_world:ore_diamond"
+    ],
+    [],
+    [],
+    [
+      "planet_world:cap_stone_boulder",
+      "planet_world:cap_patch_grass"
+    ],
+    []
+  ],
+  "spawn_costs": {},
+  "spawners": {}
+}
