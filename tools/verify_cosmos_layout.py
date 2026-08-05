@@ -33,6 +33,11 @@ the JSON drifts from what was verified):
      period/2 gets caught too) to have non-negative XZ surface-to-surface gap
      over the same periodic-image search as (2).
 
+  6. Spawn safety: with an empty `spawn_target` vanilla starts its spawn search at
+     BlockPos.ZERO and scans chunk (0,0), so the untiled home sphere must cover that
+     chunk's corner columns with real thickness. Cross-reads the overworld
+     noise_settings so a future non-empty `spawn_target` also trips this check.
+
 Exit 0 with "OK" when every check passes; exit 1 listing every violation
 otherwise.
 
@@ -48,9 +53,16 @@ import pathlib
 import sys
 from dataclasses import dataclass
 
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
 FIELD_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent
+    REPO_ROOT
     / "src/main/resources/data/planet_world/worldgen/density_function/planet_field.json"
+)
+
+NOISE_SETTINGS_PATH = (
+    REPO_ROOT
+    / "src/main/resources/data/minecraft/worldgen/noise_settings/overworld.json"
 )
 
 BOUNDARY_MARGIN = 8.0
@@ -59,6 +71,15 @@ Y_MIN, Y_MAX = -64.0, 320.0
 MAX_VISIBLE_GAP = 220.0
 MIN_VISIBLE_NEIGHBORS = 2
 SHIFT_RANGE = range(-2, 3)  # -2..2 inclusive; safe for period >> 2*(max radius + gap)
+
+# Spawn-safety (check 6). Vanilla 1.21.1 Climate.Sampler#findSpawnPosition returns
+# BlockPos.ZERO whenever noise_settings' spawn_target is empty, so
+# MinecraftServer#setInitialSpawn starts its search at chunk (0,0) and
+# PlayerRespawnLogic#getSpawnPosInChunk scans blocks x,z in 0..15 of that chunk. The
+# player therefore lands on the home planet only while the untiled sphere still covers
+# that 16x16 footprint with real terrain.
+SPAWN_CHUNK_CORNERS = ((0, 0), (0, 15), (15, 0), (15, 15))
+MIN_SPAWN_COLUMN_THICKNESS = 24.0  # blocks; also the depth the shallow ore bands need
 
 
 @dataclass
@@ -188,6 +209,56 @@ def check_y_extent(sphere: Sphere) -> str | None:
     return None
 
 
+def check_spawn_safety(spheres: list[Sphere]) -> list[str]:
+    """Check 6: the player's initial spawn lands on the home planet.
+
+    Three things have to hold together, so they are checked together:
+
+    1. ``spawn_target`` in the overworld noise_settings is empty, which is what makes
+       vanilla hand back ``BlockPos.ZERO`` and search chunk (0,0) first.
+    2. Exactly one sphere is untiled — that is the home planet, the only one pinned to
+       absolute coordinates rather than repeated every ``period`` blocks.
+    3. Every corner column of chunk (0,0) is inside the home sphere with at least
+       ``MIN_SPAWN_COLUMN_THICKNESS`` blocks of rock under it, so the spawn search finds
+       standable ground rather than a rim sliver (or void, which drops the player at
+       y=sea_level with nothing under them).
+    """
+    violations: list[str] = []
+
+    settings = json.loads(NOISE_SETTINGS_PATH.read_text(encoding="utf-8"))
+    spawn_target = settings.get("spawn_target")
+    if spawn_target:
+        violations.append(
+            f"spawn_target is non-empty ({len(spawn_target)} entry/entries); the spawn "
+            "search no longer starts at BlockPos.ZERO, so landing on the home planet is "
+            "no longer implied by this file"
+        )
+
+    home = [s for s in spheres if s.period is None]
+    if len(home) != 1:
+        violations.append(
+            f"expected exactly 1 untiled (home) sphere, found {len(home)}"
+        )
+        return violations
+
+    h = home[0]
+    for cx, cz in SPAWN_CHUNK_CORNERS:
+        d2 = (cx - h.cx) ** 2 + (cz - h.cz) ** 2
+        if d2 >= h.r * h.r:
+            violations.append(
+                f"{h.name}: chunk-(0,0) column ({cx},{cz}) is outside the home sphere "
+                f"(xz dist={math.sqrt(d2):.2f} >= r={h.r:.1f})"
+            )
+            continue
+        thickness = 2.0 * math.sqrt(h.r * h.r - d2)
+        if thickness < MIN_SPAWN_COLUMN_THICKNESS:
+            violations.append(
+                f"{h.name}: chunk-(0,0) column ({cx},{cz}) is only {thickness:.1f} blocks "
+                f"thick (need >= {MIN_SPAWN_COLUMN_THICKNESS})"
+            )
+    return violations
+
+
 def main() -> int:
     spheres = load_spheres()
     violations: list[str] = []
@@ -237,6 +308,8 @@ def main() -> int:
                 f"(need >= {MIN_VISIBLE_NEIGHBORS})"
             )
 
+    violations.extend("SPAWN: " + m for m in check_spawn_safety(spheres))
+
     print(f"Parsed {len(spheres)} sphere(s) from {FIELD_PATH}:")
     for s in spheres:
         tiled = f"period={s.period:.0f}" if s.period is not None else "not tiled"
@@ -251,7 +324,9 @@ def main() -> int:
             print(f"  - {v}")
         return 1
 
-    print("OK: no boundary, spacing, Y-range, visibility, or XZ-occlusion violations")
+    print(
+        "OK: no boundary, spacing, Y-range, visibility, XZ-occlusion, or spawn violations"
+    )
     return 0
 
 

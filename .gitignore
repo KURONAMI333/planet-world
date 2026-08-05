@@ -40,3 +40,6 @@ repo/
 !**/src/**/repo/
 
 branding/
+
+### Python ###
+__pycache__/
