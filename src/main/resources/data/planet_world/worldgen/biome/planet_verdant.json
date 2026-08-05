@@ -11,7 +11,9 @@
   "carvers": {},
   "features": [
     [],
-    [],
+    [
+      "planet_world:cap_pond"
+    ],
     [],
     [],
     [],
