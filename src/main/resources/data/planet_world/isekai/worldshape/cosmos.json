@@ -18,6 +18,17 @@
     "planet_world:planet_crystal",
     "planet_world:planet_dead"
   ] },
+  "additions": {
+    "mob_spawns": [
+      { "category": "monster", "type": "minecraft:spider", "weight": 100, "min_count": 2, "max_count": 2 },
+      { "category": "monster", "type": "minecraft:zombie", "weight": 95, "min_count": 2, "max_count": 2 },
+      { "category": "monster", "type": "minecraft:zombie_villager", "weight": 5, "min_count": 1, "max_count": 1 },
+      { "category": "monster", "type": "minecraft:skeleton", "weight": 100, "min_count": 2, "max_count": 2 },
+      { "category": "monster", "type": "minecraft:creeper", "weight": 100, "min_count": 2, "max_count": 2 },
+      { "category": "monster", "type": "minecraft:enderman", "weight": 10, "min_count": 1, "max_count": 2 },
+      { "category": "monster", "type": "minecraft:witch", "weight": 5, "min_count": 1, "max_count": 1 }
+    ]
+  },
   "atmosphere": {
     "has_precipitation": false,
     "sky_color": 0,
