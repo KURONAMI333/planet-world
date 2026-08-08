@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Cosmos planet-field layout regression check (isekai_verify dev fixture only).
+"""Cosmos planet-field layout regression check.
 
 Parses the live density function tree at
-`data/isekai_verify/worldgen/density_function/planet_field.json` (a nested
+`data/planet_world/worldgen/density_function/planet_field.json` (a nested
 `isekai_api:max` of spheres, each `isekai_api:add(constant r, negate(distance(...)))`,
-optionally wrapped in `isekai_api:repeat(period_x, period_z, f=...)`) and checks,
+optionally wrapped in `isekai_api:repeat(period_x, period_z, f=...)`, the whole tree
+summed with the seeded relief term `planet_world:planet_relief`) and checks,
 against the *actual JSON values* (not a hand-copied table, so this fails the moment
 the JSON drifts from what was verified):
 
@@ -38,6 +39,26 @@ the JSON drifts from what was verified):
      chunk's corner columns with real thickness. Cross-reads the overworld
      noise_settings so a future non-empty `spawn_target` also trips this check.
 
+Effective radius, not nominal radius
+------------------------------------
+The relief term is a world-seed-driven `minecraft:noise` added to the whole field, so
+the surface of a sphere sits where `r + relief(x,y,z) - distance = 0` — the sphere's
+*effective* radius is `r + relief`, not `r`. Every check below therefore runs on the
+worst-case effective radius for the direction of risk it guards, read out of
+`density_function/planet_relief.json`:
+
+  * `r_out = r + max(0, relief_max)` — used by every check that guards against a
+    sphere being *too big* (tile-boundary clipping, pairwise spacing, Y range,
+    XZ occlusion).
+  * `r_in  = r + min(0, relief_min)` — used by every check that guards against a
+    sphere being *too small* (spawn column thickness, neighbour visibility).
+
+The relief file clamps the noise to a fixed interval before scaling, so `relief_min`
+and `relief_max` are exact structural bounds, not an estimate of what the noise
+typically produces. With the shipped inward-only relief (`relief_max == 0`) the
+"too big" checks reduce to exactly the pre-relief geometry check — that is the point:
+the relief cannot push a sphere past a tile seam or into a neighbour, by construction.
+
 Exit 0 with "OK" when every check passes; exit 1 listing every violation
 otherwise.
 
@@ -65,6 +86,14 @@ NOISE_SETTINGS_PATH = (
     / "src/main/resources/data/minecraft/worldgen/noise_settings/overworld.json"
 )
 
+RELIEF_PATH = (
+    REPO_ROOT
+    / "src/main/resources/data/planet_world/worldgen/density_function/planet_relief.json"
+)
+
+# The only density function planet_field.json is allowed to pull in by reference.
+RELIEF_REF = "planet_world:planet_relief"
+
 BOUNDARY_MARGIN = 8.0
 MIN_SURFACE_GAP = 100.0
 Y_MIN, Y_MAX = -64.0, 320.0
@@ -88,15 +117,94 @@ class Sphere:
     cx: float
     cy: float
     cz: float
-    r: float
+    r: float  # nominal radius, straight out of the JSON constant
     period: float | None  # None => not tiled (e.g. the home planet)
+    # Worst-case effective radii once the relief term is added. Defaulted so callers
+    # that only care about the nominal geometry (probe_planet_ores.py) keep working.
+    r_out: float = 0.0  # largest the sphere can ever get
+    r_in: float = 0.0  # smallest the sphere can ever get
+
+    def __post_init__(self) -> None:
+        if self.r_out == 0.0:
+            self.r_out = self.r
+        if self.r_in == 0.0:
+            self.r_in = self.r
 
 
-def _walk(node: dict, path: str, period: float | None, out: list[Sphere]) -> None:
+def load_relief_bounds(
+    relief_path: pathlib.Path = RELIEF_PATH, required: bool = False
+) -> tuple[float, float]:
+    """Exact (min, max) of the relief term added to the whole planet field.
+
+    Only recognises the one shape the field is allowed to use:
+    ``mul(depth, clamp(input, min, max))``. The clamp is what makes the bounds exact
+    rather than an estimate — `minecraft:noise` alone has no tight analytic bound, so
+    a relief built without a clamp would leave every downstream check guessing. Any
+    other shape raises instead of silently returning a wrong (and too generous) bound.
+
+    ``required`` is set by the caller once it knows whether the field tree actually
+    references the relief. A referenced-but-missing file has to be an error here: the
+    checks would otherwise pass on a clean (0, 0) relief while the game fails to load
+    the datapack at all.
+    """
+    if not relief_path.exists():
+        if required:
+            raise ValueError(
+                f"{FIELD_PATH.name} references {RELIEF_REF} but {relief_path} does not "
+                "exist — the datapack will fail to resolve the density function"
+            )
+        return (0.0, 0.0)
+    node = json.loads(relief_path.read_text(encoding="utf-8"))
+    if node.get("type") != "minecraft:mul":
+        raise ValueError(
+            f"{relief_path.name}: expected top-level minecraft:mul carrying the single "
+            f"depth constant, got {node.get('type')!r}"
+        )
+    depth = node.get("argument1")
+    inner = node.get("argument2")
+    if not isinstance(depth, (int, float)):
+        raise ValueError(
+            f"{relief_path.name}: argument1 must be the literal depth constant "
+            "(the one number this file exists to expose), not a nested function"
+        )
+    if not isinstance(inner, dict) or inner.get("type") != "minecraft:clamp":
+        raise ValueError(
+            f"{relief_path.name}: argument2 must be a minecraft:clamp so the relief has "
+            "hard bounds; without it the layout checks below have nothing to bound"
+        )
+    lo, hi = float(depth) * float(inner["min"]), float(depth) * float(inner["max"])
+    return (min(lo, hi), max(lo, hi))
+
+
+def _walk(node: dict | str, path: str, period: float | None, out: list[Sphere]) -> None:
+    if isinstance(node, str):
+        raise ValueError(
+            f"{path}: density function reference {node!r} in a position this checker "
+            "cannot resolve; only the relief term may be referenced, and only as a "
+            "direct child of the root add()"
+        )
     node_type = node["type"]
     if node_type == "isekai_api:max":
         _walk(node["a"], path + ".a", period, out)
         _walk(node["b"], path + ".b", period, out)
+        return
+    if node_type == "isekai_api:add" and (
+        isinstance(node["a"], str) or isinstance(node["b"], str)
+    ):
+        # The relief wrapper: add(<sphere tree>, "planet_world:planet_relief"). Its
+        # magnitude is read separately by load_relief_bounds() and folded into every
+        # sphere's r_out / r_in, so here it is only validated and stepped over.
+        for side in ("a", "b"):
+            child = node[side]
+            if isinstance(child, str):
+                if child != RELIEF_REF:
+                    raise ValueError(
+                        f"{path}.{side}: unexpected density function reference "
+                        f"{child!r} (only {RELIEF_REF!r} is accounted for by the "
+                        "effective-radius checks below)"
+                    )
+            else:
+                _walk(child, path + "." + side, period, out)
         return
     if node_type == "isekai_api:repeat":
         px, pz = node["period_x"], node["period_z"]
@@ -134,16 +242,35 @@ def _walk(node: dict, path: str, period: float | None, out: list[Sphere]) -> Non
     raise ValueError(f"{path}: unrecognized node type {node_type!r}")
 
 
+def field_references_relief(data: dict) -> bool:
+    """True when the field tree pulls the relief in by reference. `_walk` only tolerates
+    that reference as a direct child of the root add(), so this is the only place it can
+    legally appear."""
+    return data.get("type") == "isekai_api:add" and RELIEF_REF in (
+        data.get("a"),
+        data.get("b"),
+    )
+
+
 def load_spheres(field_path: pathlib.Path = FIELD_PATH) -> list[Sphere]:
     data = json.loads(field_path.read_text(encoding="utf-8"))
     spheres: list[Sphere] = []
     _walk(data, "root", None, spheres)
+    relief_min, relief_max = load_relief_bounds(required=field_references_relief(data))
+    for s in spheres:
+        s.r_out = s.r + max(0.0, relief_max)
+        s.r_in = s.r + min(0.0, relief_min)
     return spheres
 
 
-def min_surface_gap(a: Sphere, b: Sphere) -> float:
+def min_surface_gap(a: Sphere, b: Sphere, radius: str = "r_out") -> float:
     """Minimum surface-to-surface distance between a and b over all periodic
-    images (a body with period=None only exists at its literal position)."""
+    images (a body with period=None only exists at its literal position).
+
+    ``radius`` picks which effective radius the surfaces sit at: ``r_out`` (the
+    default) for "are they too close", ``r_in`` for "are they still close enough
+    to see each other"."""
+    ra, rb = getattr(a, radius), getattr(b, radius)
     shifts_a = SHIFT_RANGE if a.period is not None else (0,)
     shifts_b = SHIFT_RANGE if b.period is not None else (0,)
     best = math.inf
@@ -156,7 +283,7 @@ def min_surface_gap(a: Sphere, b: Sphere) -> float:
             bx = b.cx + sxb * (b.period or 0.0)
             bz = b.cz + szb * (b.period or 0.0)
             d = math.sqrt((ax - bx) ** 2 + (a.cy - b.cy) ** 2 + (az - bz) ** 2)
-            gap = d - a.r - b.r
+            gap = d - ra - rb
             if gap < best:
                 best = gap
     return best
@@ -169,7 +296,10 @@ def min_xz_surface_gap(a: Sphere, b: Sphere) -> float:
     actually cares about: two spheres can be arbitrarily far apart in Y (and
     so pass min_surface_gap's 3D check) while still overlapping when the
     column is collapsed onto the XZ plane, which silently drops the lower
-    sphere's floor-anchored ore for every column in the overlap."""
+    sphere's floor-anchored ore for every column in the overlap.
+
+    Runs on ``r_out`` — the overlap footprint is set by the widest the spheres can
+    ever get, so a relief that can bulge outward has to be paid for here."""
     shifts_a = SHIFT_RANGE if a.period is not None else (0,)
     shifts_b = SHIFT_RANGE if b.period is not None else (0,)
     best = math.inf
@@ -182,7 +312,7 @@ def min_xz_surface_gap(a: Sphere, b: Sphere) -> float:
             bx = b.cx + sxb * (b.period or 0.0)
             bz = b.cz + szb * (b.period or 0.0)
             d = math.hypot(ax - bx, az - bz)
-            gap = d - a.r - b.r
+            gap = d - a.r_out - b.r_out
             if gap < best:
                 best = gap
     return best
@@ -191,8 +321,8 @@ def min_xz_surface_gap(a: Sphere, b: Sphere) -> float:
 def check_boundary(sphere: Sphere) -> str | None:
     if sphere.period is None:
         return None
-    lo = sphere.r + BOUNDARY_MARGIN
-    hi = sphere.period - (sphere.r + BOUNDARY_MARGIN)
+    lo = sphere.r_out + BOUNDARY_MARGIN
+    hi = sphere.period - (sphere.r_out + BOUNDARY_MARGIN)
     cxm = sphere.cx % sphere.period
     czm = sphere.cz % sphere.period
     if not (lo <= cxm <= hi):
@@ -203,7 +333,7 @@ def check_boundary(sphere: Sphere) -> str | None:
 
 
 def check_y_extent(sphere: Sphere) -> str | None:
-    lo, hi = sphere.cy - sphere.r, sphere.cy + sphere.r
+    lo, hi = sphere.cy - sphere.r_out, sphere.cy + sphere.r_out
     if lo < Y_MIN or hi > Y_MAX:
         return f"{sphere.name}: y-extent [{lo:.1f},{hi:.1f}] breaks bounds [{Y_MIN},{Y_MAX}]"
     return None
@@ -222,6 +352,11 @@ def check_spawn_safety(spheres: list[Sphere]) -> list[str]:
        ``MIN_SPAWN_COLUMN_THICKNESS`` blocks of rock under it, so the spawn search finds
        standable ground rather than a rim sliver (or void, which drops the player at
        y=sea_level with nothing under them).
+
+    Point 3 runs on ``r_in`` — the *smallest* the home planet can get once the relief
+    term carves into it. A relief deep enough to thin the spawn columns below the floor
+    fails here even though it leaves every other check untouched, which is the whole
+    reason the two effective radii are tracked separately.
     """
     violations: list[str] = []
 
@@ -244,13 +379,13 @@ def check_spawn_safety(spheres: list[Sphere]) -> list[str]:
     h = home[0]
     for cx, cz in SPAWN_CHUNK_CORNERS:
         d2 = (cx - h.cx) ** 2 + (cz - h.cz) ** 2
-        if d2 >= h.r * h.r:
+        if d2 >= h.r_in * h.r_in:
             violations.append(
                 f"{h.name}: chunk-(0,0) column ({cx},{cz}) is outside the home sphere "
-                f"(xz dist={math.sqrt(d2):.2f} >= r={h.r:.1f})"
+                f"(xz dist={math.sqrt(d2):.2f} >= r_in={h.r_in:.1f})"
             )
             continue
-        thickness = 2.0 * math.sqrt(h.r * h.r - d2)
+        thickness = 2.0 * math.sqrt(h.r_in * h.r_in - d2)
         if thickness < MIN_SPAWN_COLUMN_THICKNESS:
             violations.append(
                 f"{h.name}: chunk-(0,0) column ({cx},{cz}) is only {thickness:.1f} blocks "
@@ -297,10 +432,12 @@ def main() -> int:
             )
 
     for a in spheres:
+        # r_in: if the relief carves both surfaces inward they drift apart, so the
+        # worst case for "can you still see a neighbour" is the smallest both can be.
         n = sum(
             1
             for b in spheres
-            if b is not a and min_surface_gap(a, b) <= MAX_VISIBLE_GAP
+            if b is not a and min_surface_gap(a, b, "r_in") <= MAX_VISIBLE_GAP
         )
         if n < MIN_VISIBLE_NEIGHBORS:
             violations.append(
@@ -310,12 +447,19 @@ def main() -> int:
 
     violations.extend("SPAWN: " + m for m in check_spawn_safety(spheres))
 
+    relief_min, relief_max = load_relief_bounds(required=True)
     print(f"Parsed {len(spheres)} sphere(s) from {FIELD_PATH}:")
     for s in spheres:
         tiled = f"period={s.period:.0f}" if s.period is not None else "not tiled"
         print(
-            f"  {s.name:60s} r={s.r:5.1f} center=({s.cx:.1f}, {s.cy:.1f}, {s.cz:.1f}) {tiled}"
+            f"  {s.name:40s} r={s.r:5.1f} "
+            f"eff=[{s.r_in:5.1f},{s.r_out:5.1f}] "
+            f"center=({s.cx:.1f}, {s.cy:.1f}, {s.cz:.1f}) {tiled}"
         )
+    print(
+        f"Relief term {RELIEF_REF}: [{relief_min:+.2f}, {relief_max:+.2f}] blocks "
+        f"(from {RELIEF_PATH.name})"
+    )
     print()
 
     if violations:
