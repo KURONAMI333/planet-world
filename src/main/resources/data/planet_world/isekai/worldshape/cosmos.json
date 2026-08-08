@@ -5,7 +5,7 @@
   "ore_strategy": { "type": "isekai_api:column_local", "scale": "proportional" },
   "structure_strategy": { "type": "isekai_api:identity" },
   "mob_spawn_strategy": { "type": "isekai_api:identity" },
-  "default_structure_predicate": { "type": "isekai_api:always" },
+  "default_structure_predicate": { "type": "isekai_api:solid_floor", "min_clearance": 0 },
   "applies_to": { "keys": [
     "planet_world:planet_verdant",
     "planet_world:planet_ember",

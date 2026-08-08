@@ -1,0 +1,14 @@
+{
+  "placement": {
+    "type": "minecraft:random_spread",
+    "salt": 63000001,
+    "separation": 5,
+    "spacing": 14
+  },
+  "structures": [
+    {
+      "structure": "minecraft:ruined_portal_desert",
+      "weight": 1
+    }
+  ]
+}

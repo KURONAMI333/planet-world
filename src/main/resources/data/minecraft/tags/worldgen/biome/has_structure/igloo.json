@@ -1,0 +1,14 @@
+{
+  "values": [
+    "planet_world:planet_verdant",
+    "planet_world:planet_ember",
+    "planet_world:planet_frost",
+    "planet_world:planet_stone",
+    "planet_world:planet_desert",
+    "planet_world:planet_mushroom",
+    "planet_world:planet_jungle",
+    "planet_world:planet_volcanic",
+    "planet_world:planet_crystal",
+    "planet_world:planet_dead"
+  ]
+}
