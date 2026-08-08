@@ -17,6 +17,7 @@ Planet World swaps the overworld's terrain generator for a repeating field of pl
 - **Ten planet biomes** — Verdant (grass over stone), Ember (red sand over red sandstone), Frost (snow over packed ice), Stone (stone over deepslate), Desert (sand over sandstone), Mushroom (mycelium over stone), Jungle (grass over stone), Volcanic (basalt over blackstone), Crystal (calcite over amethyst block), and Dead (coarse dirt over deepslate).
 - **Layout is fixed, contents aren't.** Every world tiles the same field of spheres in the same positions, but which biome lands on each sphere — and the bumps and dips carved into its surface — depends on your world seed. (Needs Isekai API 2.1.0, which added seed-mixing for this.)
 - **The vanilla ore suite** — coal through diamond, with emerald on Crystal and Jungle planets.
+- **Ruins to find, and things that find you.** Half-buried ruined portals surface across the planets, and igloos turn up often enough to be worth the trip — they're the only villagers out here. Hostile mobs spawn on the surface; with no sky above, they don't wait for night.
 - **A safe start.** Your home planet always has wood, stone, and a water source within reach of spawn.
 - **A dark, close sky.** Sky color is black and fog closes in by 220 blocks, so the void reads as open space instead of a hazy vanilla horizon.
 
