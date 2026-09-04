@@ -20,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLACED = ROOT / "src/main/resources/data/planet_world/worldgen/placed_feature"
+WORLDSHAPE = ROOT / "src/main/resources/data/planet_world/isekai/worldshape/cosmos.json"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_cosmos_layout import load_spheres  # noqa: E402 - reuse the vetted parser,
@@ -28,9 +29,21 @@ from verify_cosmos_layout import load_spheres  # noqa: E402 - reuse the vetted p
 # planet_field.json + the relief bounds and derives the relief-adjusted r_out/r_in
 # per sphere; that is strictly better evidence than a literal here).
 
-SURFACE_Y = 64
-FLOOR_Y = -64
+
+def _reference_column() -> tuple[int, int]:
+    """The ore_strategy's vanilla reference levels, read from cosmos.json.
+
+    Absent fields take RemapStrategy.ColumnLocal's own defaults (64 / -64), so this
+    tracks the JSON instead of restating it — if the worldshape ever names its own
+    surface_y/floor_y, the collapse check below re-runs against the real values.
+    """
+    strategy = json.loads(WORLDSHAPE.read_text(encoding="utf-8"))["ore_strategy"]
+    return strategy.get("surface_y", 64), strategy.get("floor_y", -64)
+
+
+SURFACE_Y, FLOOR_Y = _reference_column()
 REFERENCE_THICKNESS = 128  # ColumnBand.VANILLA_THICKNESS (unused by "proportional")
+DEPTH_EPSILON = 1.0e-9  # ColumnBand.DEPTH_EPSILON
 
 ORES = [
     "ore_coal",
@@ -80,7 +93,47 @@ def resolve_proportional(top_y: int, bottom_y: int, depth: float) -> int:
     return top_y - round(depth * (top_y - bottom_y))
 
 
-def main() -> None:
+def collapsed_at_anchor(from_depth: float, to_depth: float) -> bool:
+    """Mirror of ColumnBand.collapsedAtAnchor().
+
+    A band of zero width pinned to depth 0.0 or 1.0 is one whose whole vanilla Y range
+    fell outside SURFACE_Y..FLOOR_Y and was flattened by depth_of()'s clamp. Every sample
+    then resolves to the same plane at the very edge of the body, which for an ore reads
+    as "does not spawn" -- the Sky World failure (isekai-api issue #2). A zero-width band
+    away from both anchors is a legitimate single-plane source range and is not reported.
+    """
+    if to_depth - from_depth > DEPTH_EPSILON:
+        return False
+    return from_depth <= DEPTH_EPSILON or from_depth >= 1.0 - DEPTH_EPSILON
+
+
+def check_no_collapsed_bands(bands: list) -> int:
+    print()
+    print(
+        f"--- collapsed-band check (reference column "
+        f"surface_y={SURFACE_Y}, floor_y={FLOOR_Y}) ---"
+    )
+    bad = [
+        (name, min_y, max_y, fd)
+        for name, min_y, max_y, fd, td in bands
+        if collapsed_at_anchor(fd, td)
+    ]
+    if not bad:
+        print(
+            f"OK: all {len(bands)} ores keep a band with width; none collapsed onto an anchor"
+        )
+        return 0
+    for name, min_y, max_y, fd in bad:
+        print(
+            f"FAIL: {name} (vanilla Y {min_y}..{max_y}) collapses to zero width at depth "
+            f"{fd:.1f} -- entirely outside surface_y={SURFACE_Y}..floor_y={FLOOR_Y}, so it "
+            "resolves to one plane at the edge of the body and effectively never spawns. "
+            "Widen the ore_strategy's surface_y/floor_y to cover this range."
+        )
+    return 1
+
+
+def main() -> int:
     bands = []
     for name in ORES:
         min_y, max_y = read_y_range(name)
@@ -91,6 +144,8 @@ def main() -> None:
     for name, min_y, max_y, fd, td in bands:
         group = "shallow(top)" if anchored_to_top(fd, td) else "deep(bottom)"
         print(f"{name:<18}{min_y:>5}..{max_y:<5}  {fd:>10.4f}  {td:>10.4f}  {group}")
+
+    failures = check_no_collapsed_bands(bands)
 
     shallow_deepest = max(
         td for _, _, _, fd, td in bands if anchored_to_top(fd, td) for td in [td]
@@ -177,6 +232,8 @@ def main() -> None:
             f"{name:<18} blocks->y={y_blocks:>5} in_body={in_body_blocks}   proportional->y={y_prop:>5} in_body={in_body_prop}"
         )
 
+    return failures
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
