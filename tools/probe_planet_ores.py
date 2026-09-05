@@ -183,11 +183,14 @@ def count_filter(
 def spawn_column_top(
     rcon: Rcon, x: int, z: int, y_hi: int, y_lo: int
 ) -> tuple[int, str] | None:
-    """Topmost non-air block of the column, as (y, "grass"|"other").
+    """The surface the player lands on in this column, as (y, "grass"|"other").
 
     Mirrors what vanilla's spawn search walks down to: MinecraftServer#setInitialSpawn
     hands PlayerRespawnLogic#getSpawnPosInChunk chunk (0,0) whenever spawn_target is
     empty, and that scans down for the first block with a full upward face.
+
+    Returns the grass block's own y when one is found, so the caller reports the surface
+    rather than whatever plant happens to be standing on it.
     """
     for y in range(y_hi, y_lo - 1, -1):
         reply = rcon.cmd(
@@ -195,10 +198,19 @@ def spawn_column_top(
         )
         if "The time is" not in reply:
             continue
-        grass = rcon.cmd(
-            f"execute if block {x} {y} {z} minecraft:grass_block run time query gametime"
-        )
-        return y, ("grass" if "The time is" in grass else "other")
+        # Plants have no full upward face, so vanilla's search walks straight past them:
+        # a dandelion standing on the ground is not what the player lands on. Enumerating
+        # every plant by tag does not close (dandelion is in #small_flowers, not in
+        # #replaceable, and saplings and crops are elsewhere again), so instead look two
+        # blocks under the top — past the tallest vanilla plant — for the real surface.
+        for probe_y in (y, y - 1, y - 2):
+            grass = rcon.cmd(
+                f"execute if block {x} {probe_y} {z} minecraft:grass_block "
+                f"run time query gametime"
+            )
+            if "The time is" in grass:
+                return probe_y, "grass"
+        return y, "other"
     return None
 
 
@@ -389,6 +401,15 @@ def main() -> int:
         if missing:
             violations.append(f"no planet instance found for: {', '.join(missing)}")
         spheres = [found[b] for b in BIOMES if b in found]
+
+    if not args.layers_only:
+        # The HOME gate empties its sphere with `fill ... replace`, so measuring the same
+        # sphere here would report a hollow planet with no ore of any kind.
+        emptied = [s for s in spheres if s.period is None]
+        spheres = [s for s in spheres if s.period is not None]
+        for s in emptied:
+            print()
+            print(f"(skipping {s.name} in LAYERS: the HOME gate emptied it)")
 
     for s in spheres:
         counts = probe(rcon, s, args.half_width)
