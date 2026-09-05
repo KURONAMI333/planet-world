@@ -31,4 +31,6 @@ Replaces the overworld's terrain generator, so it's mutually exclusive with any 
 
 Not every planet carries the same materials, and that's by design. The guarantee is that your starting planet has what you need to get going, not that every world offers everything everywhere.
 
-All Rights Reserved. Free to put in any modpack, on any platform, monetised or not - no permission needed, no credit required. Source is published so you can read exactly what it does. Source & issues: https://github.com/KURONAMI333/planet-world. Built on [Isekai API](https://modrinth.com/mod/isekai-api).
+Bugs and questions: comment on the CurseForge page, or DM @kuronami333 on X.
+
+All Rights Reserved. Free to put in any modpack, on any platform, monetised or not - no permission needed, no credit required. Source is published so you can read exactly what it does: https://github.com/KURONAMI333/planet-world. Built on [Isekai API](https://modrinth.com/mod/isekai-api).
