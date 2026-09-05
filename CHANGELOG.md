@@ -3,7 +3,7 @@
 All notable changes to Planet World follow this file. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/).
 
-## [1.0.0] — unreleased
+## [1.0.0] — 2026-09-05
 
 First release. The overworld becomes an infinite field of orbiting planets, each one
 a distinct biome, tiled endlessly through a starlit void.
