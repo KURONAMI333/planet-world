@@ -65,7 +65,7 @@ ORE_BLOCKS = {
 SLABS = ("lower", "middle", "upper")
 FILLED_RE = re.compile(r"Successfully filled (\d+)")
 
-# The five resources KURONAMI333's scope declares the home planet must guarantee, each as
+# The five resources the established design scope declares the home planet must guarantee, each as
 # the /fill block predicate that counts it and the minimum count that clears the gate.
 # `wood` is a worldgen tree count, so a handful of logs is already enough to bootstrap;
 # `water` only has to yield one bucket.
